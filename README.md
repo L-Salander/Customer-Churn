@@ -79,6 +79,4 @@ In this customer churn prediction project, we explored, preprocessed, and analyz
 
 Understanding the factors contributing to customer churn is vital for businesses to take proactive measures to retain their customers. By using the insights gained from this analysis and predictive modeling, the telecom company can develop strategies to reduce customer churn, ultimately leading to improved customer satisfaction and profitability.
 
-The code and documentation for this project can be found in the GitHub repository [link to GitHub repository](insert_link_here).
-
-Please note that this report provides a high-level overview of the project, and further analysis and model refinement may be necessary for production use.
+The code and documentation for this project can be found in the GitHub repository R-Code.
