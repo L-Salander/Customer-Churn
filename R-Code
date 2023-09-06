@@ -1,0 +1,302 @@
+library(quantreg)
+library(shiny)
+library(readxl)
+library(ggplot2)
+library(caret)
+library(caTools)
+library(car)
+library(GGally)
+library(psych)
+library(corrplot)
+library(MASS)
+library(broom)
+library(WVPlots)
+library(dplyr)
+library(tidyverse)
+library(RColorBrewer)
+library(lattice)
+library(forecast)
+library(MLmetrics)
+install.packages("dplyr")
+install.packages("bigmemory")
+install.packages("readxl")
+install.packages("ggplot2")
+
+
+memory.limit()
+[1] 1535.875
+memory.limit(size=40000)
+
+library(bigmemory)
+
+#Let's import our data into R.
+data <- read_excel("C:\\Users\\HP\\Downloads\\data.xlsx", 
+                   sheet = "Sheet1")
+glimpse(data)
+dim(data)
+
+#missing values
+
+sapply(data, function(x) sum(is.na(x)))
+
+#turning usage in quarters groups
+
+min(data$months)
+
+max(data$months)
+
+group_quarters <- function(months){
+  if (months >= 0 & months <= 3){
+    return('0-3 Month')
+  }else if(months > 3 & months <= 6){
+    return('3-6 Month')
+  }else if (months > 6 & months <= 9){
+    return('6-9 Month')
+  }else if (months > 9 & months <=12){
+    return('9-12 Month')
+  }else if(months > 12 & months <= 15){
+    return('12-15 Month')
+  }else if (months > 15 & months <= 18){
+    return('15-18 Month')
+  }else if (months > 18 & months <=21){
+    return('18-21 Month')
+  }else if (months > 21 & months <=24){
+    return('21-24 Month')
+  }
+}
+
+data$group_quarters <- sapply(data$months,group_quarters)
+data$group_quarters <- as.factor(data$group_quarters)
+
+glimpse(data)
+
+hist(data$months, main = "Months", xlab = "No. of Months", ylim = c(3000, 9000), col = "lightgreen")
+
+#finding correlation of bill with usage
+#Let's  check the correlation of all the independent variables.
+x <- data[,-c(1,2,4, 5,9, 10)]
+
+correlation_indep_var <- cor(x)
+correlation_indep_var
+
+c <- findCorrelation(correlation_indep_var, cutoff = 0.7, verbose = FALSE, exact = TRUE)
+c
+
+cor_plot <- pairs(x, col = "lightblue", main = "Scatterplots")
+
+#We check the no. of locations they serve in
+unique(data$location)
+
+data$location <- as.factor(data$location)
+glimpse(data)
+
+data <- data[, -c(1,2)]
+data$gender <- as.factor(data$gender)
+
+glimpse(data)
+
+#EDA
+#Bar plots of categorical variables
+p1 <- ggplot(data, aes(x=gender)) + ggtitle("Gender") + xlab("Gender") +
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+p2 <- ggplot(data, aes(x=location), xlim = c(15, 25)) + ggtitle("Location") + xlab("Location") + 
+  geom_bar(aes(y = 100*(..count..)/sum(..count..)), width = 0.5) + ylab("Percentage") + coord_flip() + theme_minimal()
+
+data <- data[, -c(8)]
+glimpse(data)
+
+data$age <- as.numeric(data$age)
+
+data <- as.data.frame(data)
+str(data)
+
+#Logistic Regression
+#First, we split the data into training and testing sets:
+intrain<- createDataPartition(data$churn,p=0.7,list=FALSE)
+set.seed(2017)
+training<- data[intrain,]
+testing<- data[-intrain,]
+
+#Fitting the Logistic Regression Model:
+# Load the required package
+install.packages("glmnet")
+library(glmnet)
+
+# Fit a logistic regression model
+LogModel <- glm(churn ~ ., data = training, family = binomial)
+
+# Summary of the model
+summary(LogModel)
+
+#Feature Analysis
+anova(LogModel, test="Chisq")
+
+#Assessing the predictive ability of the Logistic Regression model
+#testing$Churn <- as.character(testing$Churn)
+#testing$Churn[testing$Churn=="No"] <- "0"
+#testing$Churn[testing$Churn=="Yes"] <- "1"
+fitted.results <- predict(LogModel,newdata = testing, type='response')
+fitted.results <- ifelse(fitted.results > 0.5,1,0)
+misClasificError <- mean(fitted.results != testing$churn)
+print(paste('Logistic Regression Accuracy',1-misClasificError))
+
+print("Confusion Matrix for Logistic Regression"); 
+table(testing$churn, fitted.results > 0.5)
+
+#Odds Ratio
+library(MASS)
+exp(cbind(OR=coef(LogModel), confint(LogModel)))
+
+
+# Predicted values
+pred <- predict(LogModel, newdata = testing, type = "response")
+
+# True values
+true_labels <- testing$churn
+# Combine predicted and true values into a data frame
+results <- data.frame(Predicted = pred, True = true_labels)
+
+# Display the first few rows of the results
+head(results)
+
+install.packages("MLmetrics")
+library(MLmetrics)
+
+precision_score <- Precision(pred, true_labels)
+precision_score
+
+# Adjust the threshold (e.g., to 0.5)
+threshold <- 0.5
+predicted_positive <- ifelse(pred >= threshold, 1, 0)
+
+precision_score <- Precision(predicted_positive, true_labels)
+precision_score
+
+recall_score <- Recall(predicted_positive, true_labels)
+recall_score
+
+f1_score <- F1_Score(predicted_positive, true_labels)
+f1_score
+
+cat("Precision:", precision_score, "\n")
+cat("Recall:", recall_score, "\n")
+cat("F1-Score:", f1_score, "\n")
+
+#Decision Tree
+#Decision Tree visualization
+
+install.packages("rpart")
+library(rpart)
+
+# Fit a decision tree
+tree_model <- rpart(churn ~ age + gender + location + months + bill + usage, data = data, method = "class")
+
+# Print the tree
+print(tree_model)
+
+install.packages("rpart.plot")
+library(rpart.plot)
+
+# Create a plot of the decision tree
+plot <- rpart.plot(tree_model)
+
+install.packages("party")
+library(party)
+
+tree <- ctree(churn ~ age + gender + location + months + bill + usage, training)
+plot(tree)
+
+
+pred_tree <- predict(tree, testing)
+print("Confusion Matrix for Decision Tree"); table(Predicted = pred_tree, Actual = testing$churn)
+
+#Decision Tree Accuracy
+p1 <- predict(tree, training)
+tab1 <- table(Predicted = p1, Actual = training$churn)
+tab2 <- table(Predicted = pred_tree, Actual = testing$churn)
+print(paste('Decision Tree Accuracy',sum(diag(tab2))/sum(tab2)))
+
+# Calculate the correlation between 'usage' and 'bill'
+correlation_coefficient <- cor(data$usage, data$bill)
+
+# Print the correlation coefficient
+cat("Correlation between 'usage' and 'bill':", correlation_coefficient, "\n")
+
+#Random Forest
+#Initial Model
+
+install.packages("randomForest")
+library(randomForest)
+library(rpart)
+
+rfModel <- randomForest(churn ~., data = training)
+print(rfModel)
+
+#Random Forest Prediction and Confusion Matrix
+pred_rf <- predict(rfModel, testing)
+caret::confusionMatrix(pred_rf, testing$churn)
+
+levels(pred_rf)
+levels(testing$churn)
+
+
+
+#Random Forest Error Rate
+plot(rfModel)
+
+#Tune Random Forest Model
+t <- tuneRF(training[, -18], training[, 18], stepFactor = 0.5, plot = TRUE, ntreeTry = 200, trace = TRUE, improve = 0.05)
+
+#Fit the Random Forest Model After Tuning
+# Install and load the randomForest package if not already installed
+install.packages("randomForest")
+library(randomForest)
+
+# Now, you can use the randomForest function
+# Install and load the randomForest package if not already installed
+install.packages("randomForest")
+library(randomForest)
+
+# Reduce the number of trees
+# Install and load the ranger package if not already installed
+install.packages("ranger")
+library(ranger)
+
+# Reduce the number of trees and mtry
+rfModel_new <- ranger(churn ~ ., data = training, num.trees = 50, mtry = 1, importance = "permutation", proximity = TRUE)
+summary(rfModel_new)
+
+levels(pred_rf_new)
+levels(testing$churn)
+# Set the levels for predicted values and target variable
+pred_rf_new <- factor(pred_rf_new, levels = levels(testing$churn))
+testing$churn <- factor(testing$churn, levels = levels(testing$churn))
+
+# Calculate the confusion matrix
+confusion_matrix <- caret::confusionMatrix(pred_rf_new, testing$churn)
+confusion_matrix
+
+#Random Forest Feature Importance
+# Compute feature importance using the ranger package
+importance_rf <- ranger::importance(rfModel_new)
+
+# Install and load the vip package if not already installed
+install.packages("vip")
+library(vip)
+
+# Create a vip object
+v <- vip::vip(rfModel_new, num_features = 12)
+summary(v)
+
+# Fit the 'ranger' model with the importance option
+library(ranger)
+rfModel_new <- ranger(churn ~ ., data = training, num.trees = 200, importance = "permutation")
+
+# Calculate feature importances
+feature_importance <- as.data.frame(importance(rfModel_new))
+
+# View the feature importances
+print(feature_importance)
+
+# Serialize and save the model
+saveRDS(rfModel_selected, "random_forest_model.rds")
